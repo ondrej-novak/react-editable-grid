@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditableGrid } from '../src';
 import type { Column } from '../src';
@@ -227,13 +227,63 @@ describe('EditableGrid', () => {
     expect(screen.getAllByRole('row')).toHaveLength(2);
   });
 
+  it('keeps the selection on a row dragged to another place', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={[item('Apples'), item('Pears'), item('Plums')]} />);
+    await user.click(cell(0, 0));
+    fireEvent.dragStart(screen.getAllByTitle(/Drag to reorder/)[0]);
+    fireEvent.drop(screen.getAllByRole('row')[3]);
+    expect(cell(2, 0)).toHaveTextContent('Apples');
+    expect(cell(2, 0)).toHaveAttribute('aria-selected', 'true');
+    expect(cell(0, 0)).toHaveAttribute('aria-selected', 'false');
+  });
+
+  describe('table width', () => {
+    const free = 'var(--eg-column-min-width)';
+    const widthWith = (widths: (string | undefined)[], readOnly = true) => {
+      const sized = widths.map((width, i) => ({ ...columns[i], width }));
+      const { unmount } = render(
+        <EditableGrid label="Invoice lines" rows={[item('Apples')]} columns={sized} onChange={() => {}} readOnly={readOnly} />,
+      );
+      const value = screen.getByRole('grid').style.getPropertyValue('--eg-columns-width');
+      unmount();
+      return value;
+    };
+
+    it('is what all the columns need, row controls included', () => {
+      expect(widthWith(['12rem', undefined], false)).toBe(`calc(var(--eg-reorder-width) + 12rem + ${free} + var(--eg-actions-width))`);
+      expect(widthWith(['12rem', undefined])).toBe(`calc(12rem + ${free})`);
+    });
+
+    it('counts a width that cannot be added up as none', () => {
+      expect(widthWith(['', 'auto', ' 5rem '])).toBe(`calc(${free} + ${free} + 5rem)`);
+    });
+
+    it('counts nested CSS sizing functions as lengths', () => {
+      expect(widthWith(['calc(100% - var(--reserved))'])).toBe('calc(calc(100% - var(--reserved)))');
+    });
+
+    it('fits the other columns into what percentage widths leave', () => {
+      expect(widthWith(['40%', '6rem', undefined])).toBe(`calc((6rem + ${free}) * 100 / 60)`);
+      expect(widthWith(['60%', '40%', undefined])).toBe(`calc(${free} + ${free} + ${free})`);
+      expect(widthWith(['50%'])).toBe('0px');
+    });
+
+    it('uses the fallback for percentage columns that leave no space', () => {
+      const sized = ['60%', '40%', undefined].map((width, i) => ({ ...columns[i], width }));
+      render(<EditableGrid label="Invoice lines" rows={[item('Apples')]} columns={sized} onChange={() => {}} readOnly />);
+      const cols = screen.getByRole('grid').querySelectorAll('col');
+      expect(Array.from(cols, (col) => (col as HTMLElement).style.width)).toEqual(['', '', '']);
+    });
+  });
+
   describe('folding', () => {
     const many = Array.from({ length: 12 }, (_, i) => item(`Item ${i + 1}`));
 
     it('shows the first rows and opens on request', async () => {
       const user = userEvent.setup();
       render(<Harness initial={many} foldAfter={5} />);
-      expect(screen.getAllByRole('row')).toHaveLength(1 + 5 + 1);
+      expect(screen.getAllByRole('row')).toHaveLength(1 + 5);
       await user.click(screen.getByRole('button', { name: 'Show all 12 rows' }));
       expect(screen.getByRole('button', { name: 'Show first 5 rows' })).toHaveAttribute('aria-expanded', 'true');
     });
@@ -246,9 +296,40 @@ describe('EditableGrid', () => {
       expect(cell(5, 0)).toHaveFocus();
     });
 
+    it('opens when a row is moved past the fold, keeping the focus on it', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={many} foldAfter={5} />);
+      await user.click(cell(4, 0));
+      await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+      expect(cell(5, 0)).toHaveTextContent('Item 5');
+      expect(cell(5, 0)).toHaveFocus();
+    });
+
+    it('stays a tab stop when folding hides the selected cell', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={many} foldAfter={5} />);
+      await user.click(screen.getByRole('button', { name: 'Show all 12 rows' }));
+      await user.click(cell(8, 0));
+      await user.click(screen.getByRole('button', { name: 'Show first 5 rows' }));
+      await user.tab({ shift: true });
+      expect(screen.getByRole('button', { name: '+ Add row' })).toHaveFocus();
+      await user.tab({ shift: true });
+      expect(cell(0, 0)).toHaveFocus();
+    });
+
     it('does not fold away a row that needs fixing', () => {
       render(<Harness initial={[...many.slice(0, 11), item('')]} foldAfter={5} />);
       expect(cell(11, 0)).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('stays open once the row it opened for is fixed', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={[...many.slice(0, 11), item('')]} foldAfter={5} />);
+      await user.click(cell(11, 0));
+      await user.keyboard('Kiwi');
+      await user.click(screen.getByRole('button', { name: 'After' }));
+      expect(cell(11, 0)).toHaveTextContent('Kiwi');
+      expect(screen.getAllByRole('row')).toHaveLength(1 + 12);
     });
 
     it('does not fold a table that is only slightly longer than the limit', () => {

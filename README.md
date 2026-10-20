@@ -4,27 +4,18 @@ An editable table for React apps that works like a spreadsheet from the keyboard
 
 **[Live demo](https://ondrej-novak.github.io/react-editable-grid/)**
 
-Most editable tables in business apps make you click a pencil icon, fill a dialog and save, once per row.
-That is fine for one row. It is slow when someone has to check twenty invoice lines against a scanned
-document and fix three of them. This component lets them do it the way they would in a spreadsheet:
-arrow to the cell, type the new value, press Enter, carry on down the column.
+Most editable tables in business apps make you click a pencil icon, fill a dialog and save, once per row. That is fine for one row. It is slow when someone has to check twenty invoice lines against a scanned document and fix three of them. This component lets them do it the way they would in a spreadsheet: arrow to the cell, type the new value, press Enter, carry on down the column.
 
 ## What it does
 
-- **One tab stop.** Tab into the table, move with the arrow keys or Tab through the cells row by row, Tab
-  out past the last one. Read-only cells (computed totals, locked rows) and the row buttons are skipped.
-- **Type to replace.** Typing on a selected text or number cell starts editing with that character, as
-  in Excel. A select or checkbox never takes a typed letter as its value: selects open on Enter, checkboxes
-  toggle on Space.
-- **Enter commits and moves down**, Tab commits and moves right, Escape cancels, clicking away commits.
-  The selection stays on the table through all of it, so the next key lands where you expect.
-- **No false changes.** Opening a cell and leaving it unchanged does not call `onChange`, so a form
-  around the table does not become dirty just because someone read a value.
+- **Tab moves through the cells.** Tab goes to the next editable cell, row by row, the way it moves between the fields of a form, and leaves the table only past the last one. The arrow keys move in any direction. Read-only cells (computed totals, locked rows) and the row buttons are skipped.
+- **Type to replace.** Typing on a selected text or number cell starts editing with that character, as in Excel. A select or checkbox never takes a typed letter as its value: selects open on Enter, checkboxes toggle on Space.
+- **Enter commits and moves down**, Tab commits and moves right, Escape cancels, clicking away commits. The selection stays on the table through all of it, so the next key lands where you expect.
+- **No false changes.** Opening a cell and leaving it unchanged does not call `onChange`, so a form around the table does not become dirty just because someone read a value.
 - **Validation per cell**, marked with `aria-invalid` and described for screen readers.
-- **Long tables fold.** With `foldAfter`, only the first rows show until the reader asks for the rest.
-  Arrowing past the fold opens it, and an invalid row is never folded out of sight.
+- **Long tables fold.** With `foldAfter`, only the first rows show until the reader asks for the rest. Arrowing past the fold opens it, and an invalid row is never folded out of sight.
 - **Reordering and deleting** by mouse or with Alt+↑/↓ and Ctrl+Delete, so neither depends on a mouse.
-- Follows the WAI-ARIA [grid pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/).
+- Uses the roles, states and arrow keys of the WAI-ARIA [grid pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/) with a roving tabindex, except that Tab moves through the cells instead of leaving the table. That is deliberate.
 - No dependencies besides React. Styling is one CSS file with custom properties, light and dark.
 
 ## Usage
@@ -83,7 +74,7 @@ export function InvoiceLines() {
 | `readOnly` | `true`, or `(row) => boolean` to lock it for some rows only |
 | `validate` | `(value, row) => string \| undefined`, returning the error message |
 | `format` | `(value, row) => ReactNode` for display, such as currency |
-| `width` | A CSS length, padding included. Columns without one share the space the others leave. |
+| `width` | A CSS length or a percentage of the table, padding included. Columns without one share the space the others leave. |
 | `align` | `'start'` (default) or `'end'` |
 | `id` | Only needed when two columns share a `key` |
 
@@ -105,11 +96,11 @@ The component imports its own CSS file. To change it, override the custom proper
 | `--eg-locked-bg`, `--eg-locked-text` | Read-only cells and row controls |
 | `--eg-error`, `--eg-error-bg` | Invalid cells |
 | `--eg-radius` | Corner radius |
-| `--eg-column-min-width` | Narrowest a column without a `width` gets. Default `10rem`. |
+| `--eg-column-min-width` | Narrowest a column without a `width` gets. Default `6rem`. |
+| `--eg-reorder-width`, `--eg-actions-width` | Widths of the drag handle and delete button columns. Default `2rem` and `3.25rem`. |
 | `--eg-min-width` | Below this width the table scrolls sideways instead of squeezing. Default: what all the columns need. |
 
-Light or dark follows the page's `color-scheme`. Set `color-scheme: light dark` on `:root` to follow the
-operating system, or set `light` or `dark` from your theme switch. Without it, the table stays light.
+Light or dark follows the page's `color-scheme`. Set `color-scheme: light dark` on `:root` to follow the operating system, or set `light` or `dark` from your theme switch. Without it, the table stays light.
 
 ## Keys
 
@@ -118,7 +109,7 @@ operating system, or set `light` or `dark` from your theme switch. Without it, t
 | Arrows, Home, End | Move between editable cells |
 | Any character | Replace a text or number cell |
 | Enter, F2 | Edit the cell. In the editor, Enter saves and moves down. |
-| Tab, Shift+Tab | Move to the next or previous cell, wrapping to the next or previous row. In the editor, save first. |
+| Tab, Shift+Tab | Move to the next or previous cell, wrapping to the next or previous row. Past the last cell or before the first, leave the table. In the editor, save first. |
 | Escape | Cancel the edit |
 | Space | Toggle a checkbox cell |
 | Delete, Backspace | Clear a text or number cell |
@@ -127,16 +118,11 @@ operating system, or set `light` or `dark` from your theme switch. Without it, t
 
 ## A few details that took more than one try
 
-**Losing focus is two different events.** When focus leaves the table, the selection should go, or every
-table on a long form ends up wearing a selection ring. But when Enter commits an edit, the editor is
-removed from the page and focus briefly falls to `<body>` before the next cell takes it. Both look the
-same in a `blur` handler. The table waits until focus has settled before deciding which one happened.
+**Losing focus is two different events.** When focus leaves the table, the selection should go, or every table on a long form ends up wearing a selection ring. But when Enter commits an edit, the editor is removed from the page and focus briefly falls to `<body>` before the next cell takes it. Both look the same in a `blur` handler. The table waits until focus has settled before deciding which one happened.
 
-**Escape and blur both end an edit.** Pressing Escape closes the editor, which blurs it, which would commit
-the draft that Escape was meant to throw away. A flag records which one ended the edit first.
+**Escape and blur both end an edit.** Pressing Escape closes the editor, which blurs it, which would commit the draft that Escape was meant to throw away. A flag records which one ended the edit first.
 
-**Row keys without ids.** Rows reorder and get deleted, so React needs stable keys, but adding an `id`
-field would change the data the caller gets back. Keys live in a `WeakMap` keyed by the row object instead.
+**Row keys without ids.** Rows reorder and get deleted, so React needs stable keys, but adding an `id` field would change the data the caller gets back. Keys live in a `WeakMap` keyed by the row object instead.
 
 ## Development
 
