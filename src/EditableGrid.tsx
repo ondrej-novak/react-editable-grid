@@ -364,6 +364,15 @@ export function EditableGrid<Row extends object>({
     ...columns.map((column) => column.width),
     ...(showActions ? ['var(--eg-actions-width)'] : []),
   ];
+  const percentWidth = columnWidths.reduce((sum, width) => {
+    const trimmed = width?.trim() ?? '';
+    return sum + (PERCENTAGE.test(trimmed) ? parseFloat(trimmed) : 0);
+  }, 0);
+  if (percentWidth >= 100) {
+    columnWidths.forEach((width, i) => {
+      if (width && PERCENTAGE.test(width.trim())) columnWidths[i] = undefined;
+    });
+  }
 
   return (
     <div className="eg" ref={wrapperRef} onBlur={handleTableBlur}>

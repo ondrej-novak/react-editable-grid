@@ -264,6 +264,13 @@ describe('EditableGrid', () => {
       expect(widthWith(['60%', '40%', undefined])).toBe(`calc(${free} + ${free} + ${free})`);
       expect(widthWith(['50%'])).toBe('0px');
     });
+
+    it('uses the fallback for percentage columns that leave no space', () => {
+      const sized = ['60%', '40%', undefined].map((width, i) => ({ ...columns[i], width }));
+      render(<EditableGrid label="Invoice lines" rows={[item('Apples')]} columns={sized} onChange={() => {}} readOnly />);
+      const cols = screen.getByRole('grid').querySelectorAll('col');
+      expect(Array.from(cols, (col) => (col as HTMLElement).style.width)).toEqual(['', '', '']);
+    });
   });
 
   describe('folding', () => {
