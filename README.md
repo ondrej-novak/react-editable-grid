@@ -83,7 +83,8 @@ export function InvoiceLines() {
 | `readOnly` | `true`, or `(row) => boolean` to lock it for some rows only |
 | `validate` | `(value, row) => string \| undefined`, returning the error message |
 | `format` | `(value, row) => ReactNode` for display, such as currency |
-| `width`, `align` | Layout |
+| `width` | A CSS length, padding included. Columns without one share the space the others leave. |
+| `align` | `'start'` (default) or `'end'` |
 | `id` | Only needed when two columns share a `key` |
 
 ### Styling
@@ -93,7 +94,7 @@ The component imports its own CSS file. To change it, override the custom proper
 ```css
 .eg {
   --eg-accent: #7c3aed;
-  --eg-min-width: 24rem;
+  --eg-column-min-width: 8rem;
 }
 ```
 
@@ -104,7 +105,8 @@ The component imports its own CSS file. To change it, override the custom proper
 | `--eg-locked-bg`, `--eg-locked-text` | Read-only cells and row controls |
 | `--eg-error`, `--eg-error-bg` | Invalid cells |
 | `--eg-radius` | Corner radius |
-| `--eg-min-width` | Below this width the table scrolls sideways instead of squeezing. Default `36rem`. |
+| `--eg-column-min-width` | Narrowest a column without a `width` gets. Default `10rem`. |
+| `--eg-min-width` | Below this width the table scrolls sideways instead of squeezing. Default: what all the columns need. |
 
 Light or dark follows the page's `color-scheme`. Set `color-scheme: light dark` on `:root` to follow the
 operating system, or set `light` or `dark` from your theme switch. Without it, the table stays light.

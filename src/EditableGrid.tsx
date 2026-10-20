@@ -314,124 +314,133 @@ export function EditableGrid<Row extends object>({
 
   const showActions = !readOnly;
   const columnCount = columns.length + (showActions ? 2 : 0);
+  // A fixed layout gives a column without a `width` only what the others leave, which on a narrow screen is
+  // nothing. The table is held as wide as all its columns need, and scrolls sideways below that.
+  const columnsWidth = [
+    ...(showActions ? ['var(--eg-reorder-width)', 'var(--eg-actions-width)'] : []),
+    ...columns.map((column) => column.width ?? 'var(--eg-column-min-width)'),
+  ].join(' + ');
 
   return (
     <div className="eg" ref={wrapperRef} onBlur={handleTableBlur}>
-      <table
-        className="eg-table"
-        role="grid"
-        aria-label={label}
-        aria-rowcount={rows.length + 1}
-        aria-readonly={readOnly || undefined}
-      >
-        <thead>
-          <tr role="row" aria-rowindex={1}>
-            {showActions && <th role="columnheader" scope="col" className="eg-reorder"><span className="eg-sr-only">Reorder</span></th>}
-            {columns.map((column) => (
-              <th
-                key={column.id ?? column.key}
-                role="columnheader"
-                scope="col"
-                style={{ width: column.width }}
-                className={column.align === 'end' ? 'eg-end' : undefined}
+      <div className="eg-scroll">
+        <table
+          className="eg-table"
+          role="grid"
+          aria-label={label}
+          aria-rowcount={rows.length + 1}
+          aria-readonly={readOnly || undefined}
+          style={{ '--eg-columns-width': `calc(${columnsWidth})` } as React.CSSProperties}
+        >
+          <thead>
+            <tr role="row" aria-rowindex={1}>
+              {showActions && <th role="columnheader" scope="col" className="eg-reorder"><span className="eg-sr-only">Reorder</span></th>}
+              {columns.map((column) => (
+                <th
+                  key={column.id ?? column.key}
+                  role="columnheader"
+                  scope="col"
+                  style={{ width: column.width }}
+                  className={column.align === 'end' ? 'eg-end' : undefined}
+                >
+                  {column.header}
+                </th>
+              ))}
+              {showActions && <th role="columnheader" scope="col" className="eg-actions"><span className="eg-sr-only">Actions</span></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, visibleCount).map((row, r) => (
+              <tr
+                key={keyOf(row)}
+                role="row"
+                aria-rowindex={r + 2}
+                className={dragIndex === r ? 'eg-dragging' : undefined}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop(r)}
               >
-                {column.header}
-              </th>
-            ))}
-            {showActions && <th role="columnheader" scope="col" className="eg-actions"><span className="eg-sr-only">Actions</span></th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.slice(0, visibleCount).map((row, r) => (
-            <tr
-              key={keyOf(row)}
-              role="row"
-              aria-rowindex={r + 2}
-              className={dragIndex === r ? 'eg-dragging' : undefined}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop(r)}
-            >
-              {showActions && (
-                <td role="gridcell" className="eg-reorder">
-                  <span
-                    className="eg-handle"
-                    draggable
-                    aria-hidden
-                    title="Drag to reorder (or Alt+Arrow keys on a cell)"
-                    onDragStart={() => setDragIndex(r)}
-                    onDragEnd={() => setDragIndex(null)}
-                  >
-                    ⠿
-                  </span>
-                </td>
-              )}
-              {columns.map((column, c) => {
-                const isEditing = editing?.row === r && editing.col === c;
-                const isSelected = selected?.row === r && selected.col === c;
-                const canEdit = editable(r, c);
-                const error = errorAt(r, c);
-                const errorId = error ? `${gridId}-err-${r}-${c}` : undefined;
-                const cellLabel = `${column.header}, row ${r + 1}`;
-                return (
-                  <td
-                    key={column.id ?? column.key}
-                    role="gridcell"
-                    data-cell={`${r}:${c}`}
-                    tabIndex={!isEditing && tabStop?.row === r && tabStop.col === c ? 0 : -1}
-                    aria-selected={canEdit ? isSelected : undefined}
-                    aria-readonly={canEdit ? undefined : true}
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={errorId}
-                    className={[
-                      'eg-cell',
-                      column.align === 'end' && 'eg-end',
-                      isSelected && 'eg-selected',
-                      isEditing && 'eg-editing',
-                      !canEdit && 'eg-locked',
-                      error && 'eg-invalid',
-                    ].filter(Boolean).join(' ')}
-                    onClick={() => { if (canEdit && !isEditing) setSelected({ row: r, col: c }); }}
-                    onDoubleClick={() => { if (typeOf(column) !== 'checkbox') startEditing(r, c); }}
-                    onKeyDown={handleCellKeyDown(r, c)}
-                  >
-                    {isEditing ? (
-                      <div ref={editorRef} className="eg-editor" onKeyDown={handleEditorKeyDown(r, c)} onBlur={handleEditorBlur(r, c)}>
-                        <CellEditor column={column} value={draft} onChange={setDraft} label={cellLabel} />
-                      </div>
-                    ) : (
-                      <span className="eg-value" title={error}>{displayValue(column, row[column.key], row)}</span>
-                    )}
-                    {error && <span id={errorId} className="eg-sr-only">{error}</span>}
+                {showActions && (
+                  <td role="gridcell" className="eg-reorder">
+                    <span
+                      className="eg-handle"
+                      draggable
+                      aria-hidden
+                      title="Drag to reorder (or Alt+Arrow keys on a cell)"
+                      onDragStart={() => setDragIndex(r)}
+                      onDragEnd={() => setDragIndex(null)}
+                    >
+                      ⠿
+                    </span>
                   </td>
-                );
-              })}
-              {showActions && (
-                <td role="gridcell" className="eg-actions">
-                  <button
-                    type="button"
-                    className="eg-delete"
-                    tabIndex={-1}
-                    aria-label={`Delete row ${r + 1}`}
-                    title="Delete row (or Ctrl+Delete on a cell)"
-                    onClick={() => deleteRow(r)}
-                  >
-                    ✕
+                )}
+                {columns.map((column, c) => {
+                  const isEditing = editing?.row === r && editing.col === c;
+                  const isSelected = selected?.row === r && selected.col === c;
+                  const canEdit = editable(r, c);
+                  const error = errorAt(r, c);
+                  const errorId = error ? `${gridId}-err-${r}-${c}` : undefined;
+                  const cellLabel = `${column.header}, row ${r + 1}`;
+                  return (
+                    <td
+                      key={column.id ?? column.key}
+                      role="gridcell"
+                      data-cell={`${r}:${c}`}
+                      tabIndex={!isEditing && tabStop?.row === r && tabStop.col === c ? 0 : -1}
+                      aria-selected={canEdit ? isSelected : undefined}
+                      aria-readonly={canEdit ? undefined : true}
+                      aria-invalid={error ? true : undefined}
+                      aria-describedby={errorId}
+                      className={[
+                        'eg-cell',
+                        column.align === 'end' && 'eg-end',
+                        isSelected && 'eg-selected',
+                        isEditing && 'eg-editing',
+                        !canEdit && 'eg-locked',
+                        error && 'eg-invalid',
+                      ].filter(Boolean).join(' ')}
+                      onClick={() => { if (canEdit && !isEditing) setSelected({ row: r, col: c }); }}
+                      onDoubleClick={() => { if (typeOf(column) !== 'checkbox') startEditing(r, c); }}
+                      onKeyDown={handleCellKeyDown(r, c)}
+                    >
+                      {isEditing ? (
+                        <div ref={editorRef} className="eg-editor" onKeyDown={handleEditorKeyDown(r, c)} onBlur={handleEditorBlur(r, c)}>
+                          <CellEditor column={column} value={draft} onChange={setDraft} label={cellLabel} />
+                        </div>
+                      ) : (
+                        <span className="eg-value" title={error}>{displayValue(column, row[column.key], row)}</span>
+                      )}
+                      {error && <span id={errorId} className="eg-sr-only">{error}</span>}
+                    </td>
+                  );
+                })}
+                {showActions && (
+                  <td role="gridcell" className="eg-actions">
+                    <button
+                      type="button"
+                      className="eg-delete"
+                      tabIndex={-1}
+                      aria-label={`Delete row ${r + 1}`}
+                      title="Delete row (or Ctrl+Delete on a cell)"
+                      onClick={() => deleteRow(r)}
+                    >
+                      ✕
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {foldable && !hiddenError && (
+              <tr className="eg-fold">
+                <td colSpan={columnCount}>
+                  <button type="button" aria-expanded={!folded} onClick={() => setExpanded(!expanded)}>
+                    {folded ? `Show all ${rows.length} rows` : `Show first ${foldAfter} rows`}
                   </button>
                 </td>
-              )}
-            </tr>
-          ))}
-          {foldable && !hiddenError && (
-            <tr className="eg-fold">
-              <td colSpan={columnCount}>
-                <button type="button" aria-expanded={!folded} onClick={() => setExpanded(!expanded)}>
-                  {folded ? `Show all ${rows.length} rows` : `Show first ${foldAfter} rows`}
-                </button>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
       {createRow && !readOnly && (
         <button type="button" className="eg-add" onClick={addRow}>+ Add row</button>
       )}
