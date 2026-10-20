@@ -1,0 +1,156 @@
+.eg {
+  --eg-border: #d4d7dd;
+  --eg-header-bg: #f5f6f8;
+  --eg-locked-bg: #fafafa;
+  --eg-locked-text: #6b7280;
+  --eg-accent: #2563eb;
+  --eg-error: #c62828;
+  --eg-error-bg: #fdecea;
+  --eg-radius: 6px;
+  font: inherit;
+  /* On a narrow screen the table scrolls sideways instead of squeezing its cells below their content. */
+  overflow-x: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .eg {
+    --eg-border: #3a3f47;
+    --eg-header-bg: #1f2329;
+    --eg-locked-bg: #1a1d22;
+    --eg-locked-text: #9aa3ad;
+    --eg-accent: #60a5fa;
+    --eg-error: #f28b82;
+    --eg-error-bg: #3b1f1f;
+  }
+}
+
+.eg-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--eg-border);
+  border-radius: var(--eg-radius);
+  overflow: hidden;
+  table-layout: fixed;
+  min-width: 36rem;
+}
+
+.eg-table th,
+.eg-table td {
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--eg-border);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.eg-table tbody tr:last-child td { border-bottom: none; }
+
+.eg-table th {
+  background: var(--eg-header-bg);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.eg-end { text-align: end !important; }
+
+.eg-cell {
+  position: relative;
+  cursor: cell;
+  outline: none;
+}
+
+.eg-cell .eg-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 1.25em;
+}
+
+.eg-locked {
+  background: var(--eg-locked-bg);
+  color: var(--eg-locked-text);
+  cursor: default;
+}
+
+.eg-selected,
+.eg-cell:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--eg-accent);
+}
+
+.eg-invalid { background: var(--eg-error-bg); }
+.eg-invalid::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  border-style: solid;
+  border-width: 0 8px 8px 0;
+  border-color: transparent var(--eg-error) transparent transparent;
+}
+
+.eg-editing { padding: 0 !important; box-shadow: inset 0 0 0 2px var(--eg-accent); }
+
+.eg-editor input[type='text'],
+.eg-editor select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.625rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  outline: none;
+}
+
+.eg-actions {
+  width: 4.5rem;
+  white-space: nowrap;
+  text-align: end !important;
+}
+
+.eg-handle {
+  cursor: grab;
+  padding-inline: 0.25rem;
+  color: var(--eg-locked-text);
+  user-select: none;
+}
+
+.eg-delete {
+  border: none;
+  background: none;
+  color: var(--eg-locked-text);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+.eg-delete:hover { color: var(--eg-error); }
+
+.eg-dragging { opacity: 0.4; }
+
+.eg-fold td { text-align: center !important; }
+
+.eg-fold button,
+.eg-add {
+  border: none;
+  background: none;
+  color: var(--eg-accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+.eg-add { margin-top: 0.5rem; }
+
+.eg-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .eg-cell { transition: box-shadow 80ms ease-out; }
+}

@@ -1,0 +1,405 @@
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { CellPosition, Column } from './types';
+import { CellEditor } from './CellEditor';
+import { acceptsTyping, displayValue, isCellReadOnly, parseDraft, sameValue, typeOf } from './cells';
+import './EditableGrid.css';
+
+export interface EditableGridProps<Row extends object> {
+  rows: Row[];
+  columns: Column<Row>[];
+  onChange: (rows: Row[]) => void;
+  /** Accessible name of the table. */
+  label: string;
+  /** Creates the row that "Add row" appends. Without it, the table cannot grow. */
+  createRow?: () => Row;
+  readOnly?: boolean;
+  /** Shows only this many rows until the reader asks for the rest. */
+  foldAfter?: number;
+}
+
+// Folding away one or two rows behind a button reads as a malfunction rather than a tidy-up, so a table
+// has to run this far past `foldAfter` before it folds at all.
+const FOLD_MARGIN = 2;
+
+export function EditableGrid<Row extends object>({
+  rows,
+  columns,
+  onChange,
+  label,
+  createRow,
+  readOnly = false,
+  foldAfter,
+}: EditableGridProps<Row>) {
+  const gridId = useId();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  // Two layers, as in a spreadsheet. `selected` is where the reader is; `editing` is a cell they opened
+  // on purpose, and `draft` is what they have typed into it so far.
+  const [rawSelected, setSelected] = useState<CellPosition | null>(null);
+  const [editing, setEditing] = useState<CellPosition | null>(null);
+  const [draft, setDraft] = useState<unknown>(undefined);
+  const [expanded, setExpanded] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  // A deleted row can take the selected cell with it.
+  const selected = rawSelected && rawSelected.row < rows.length ? rawSelected : null;
+
+  // Focus moves only after a keyboard move. A click has already focused the cell it landed on.
+  const pendingFocus = useRef(false);
+  // Escape and blur can both end one edit. Whichever runs first owns it.
+  const editSettled = useRef(false);
+  const blurTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (blurTimer.current !== null) window.clearTimeout(blurTimer.current);
+  }, []);
+
+  // Stable React keys across reorder and delete, without adding an id field to the caller's data.
+  const rowKeys = useRef(new WeakMap<Row, string>());
+  const keyCounter = useRef(0);
+  const keyOf = (row: Row) => {
+    let key = rowKeys.current.get(row);
+    if (!key) {
+      key = `row-${++keyCounter.current}`;
+      rowKeys.current.set(row, key);
+    }
+    return key;
+  };
+
+  const errorAt = useCallback((rowIndex: number, col: number): string | undefined => {
+    const column = columns[col];
+    const row = rows[rowIndex];
+    return column?.validate?.(row[column.key], row);
+  }, [columns, rows]);
+
+  const foldable = !!foldAfter && rows.length > foldAfter + FOLD_MARGIN;
+  const foldsAway = useCallback((rowIndex: number) => foldable && rowIndex >= foldAfter!, [foldable, foldAfter]);
+
+  // An invalid row hidden behind the fold is a problem nobody can see, so the table opens for it.
+  const hiddenError = useMemo(
+    () => foldable && rows.some((_, r) => foldsAway(r) && columns.some((_, c) => errorAt(r, c))),
+    [foldable, rows, columns, foldsAway, errorAt],
+  );
+  const folded = foldable && !expanded && !hiddenError;
+  const visibleCount = folded ? foldAfter! : rows.length;
+
+  const editable = useCallback(
+    (row: number, col: number) => !readOnly && !isCellReadOnly(columns[col], rows[row]),
+    [readOnly, columns, rows],
+  );
+
+  // The table is a single tab stop. Before anything is selected, it rests on the first editable cell.
+  const firstEditable = useMemo(() => {
+    for (let r = 0; r < visibleCount; r++) {
+      for (let c = 0; c < columns.length; c++) if (editable(r, c)) return { row: r, col: c };
+    }
+    return null;
+  }, [visibleCount, columns.length, editable]);
+  const tabStop = selected ?? firstEditable;
+
+  // Walks in the given direction until it finds a cell that can be landed on, so a read-only column
+  // is stepped over instead of stopping the walk in front of it.
+  const moveSelection = useCallback((row: number, col: number, rowStep = 0, colStep = 0) => {
+    for (let r = row, c = col; r >= 0 && r < rows.length && c >= 0 && c < columns.length; r += rowStep, c += colStep) {
+      if (editable(r, c)) {
+        // The fold is a tidy-up, not the end of the data: arrowing past it opens it.
+        if (foldsAway(r)) setExpanded(true);
+        pendingFocus.current = true;
+        setSelected({ row: r, col: c });
+        return true;
+      }
+      if (rowStep === 0 && colStep === 0) return false;
+    }
+    return false;
+  }, [rows.length, columns.length, editable, foldsAway]);
+
+  const reselect = (position: CellPosition) => {
+    pendingFocus.current = true;
+    setSelected({ ...position });
+  };
+
+  useEffect(() => {
+    if (!pendingFocus.current || !selected) return;
+    pendingFocus.current = false;
+    wrapperRef.current
+      ?.querySelector<HTMLElement>(`[data-cell="${selected.row}:${selected.col}"]`)
+      ?.focus();
+  }, [selected]);
+
+  // The key or click that opened the editor has to land in it, with the caret after any typed text.
+  useEffect(() => {
+    if (!editing) return;
+    const control = editorRef.current?.querySelector<HTMLInputElement | HTMLSelectElement>('input, select');
+    control?.focus();
+    if (control instanceof HTMLInputElement && control.type === 'text') {
+      control.setSelectionRange(control.value.length, control.value.length);
+    }
+  }, [editing]);
+
+  const writeCell = useCallback((row: number, col: number, value: unknown) => {
+    const { key } = columns[col];
+    // Opening a cell to read it and leaving it alone is not a change.
+    if (sameValue(rows[row][key], value)) return;
+    onChange(rows.map((r, i) => (i === row ? { ...r, [key]: value } : r)));
+  }, [columns, rows, onChange]);
+
+  const startEditing = (row: number, col: number, initial?: string) => {
+    if (!editable(row, col)) return;
+    editSettled.current = false;
+    setDraft(initial ?? rows[row][columns[col].key]);
+    setEditing({ row, col });
+  };
+
+  const closeEditor = () => {
+    editSettled.current = true;
+    setEditing(null);
+    setDraft(undefined);
+  };
+
+  const commitEdit = (row: number, col: number) => {
+    if (editSettled.current) return;
+    writeCell(row, col, parseDraft(columns[col], draft));
+    closeEditor();
+  };
+
+  const moveRow = (from: number, to: number) => {
+    if (to < 0 || to >= rows.length || from === to) return false;
+    const next = [...rows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+    return true;
+  };
+
+  const handleCellKeyDown = (row: number, col: number) => (event: React.KeyboardEvent) => {
+    if (editing) return;
+    const column = columns[col];
+
+    if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown') && !readOnly) {
+      event.preventDefault();
+      const to = row + (event.key === 'ArrowUp' ? -1 : 1);
+      if (moveRow(row, to)) reselect({ row: to, col });
+      return;
+    }
+
+    switch (event.key) {
+      case 'ArrowDown': event.preventDefault(); moveSelection(row + 1, col, 1, 0); return;
+      case 'ArrowUp': event.preventDefault(); moveSelection(row - 1, col, -1, 0); return;
+      case 'ArrowRight': event.preventDefault(); moveSelection(row, col + 1, 0, 1); return;
+      case 'ArrowLeft': event.preventDefault(); moveSelection(row, col - 1, 0, -1); return;
+      case 'Home': event.preventDefault(); moveSelection(row, 0, 0, 1); return;
+      case 'End': event.preventDefault(); moveSelection(row, columns.length - 1, 0, -1); return;
+      default: break;
+    }
+
+    if (!editable(row, col)) return;
+
+    // A checkbox has nothing to type, so the keys that would open an editor toggle it instead.
+    if (typeOf(column) === 'checkbox' && (event.key === 'Enter' || event.key === ' ' || event.key === 'F2')) {
+      event.preventDefault();
+      writeCell(row, col, !rows[row][column.key]);
+      return;
+    }
+    // Enter belongs to the table while a cell is selected, so it cannot submit a form around it.
+    if (event.key === 'Enter' || event.key === 'F2') {
+      event.preventDefault();
+      startEditing(row, col);
+      return;
+    }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && acceptsTyping(column)) {
+      event.preventDefault();
+      writeCell(row, col, typeOf(column) === 'number' ? null : '');
+      return;
+    }
+    // Modified keys are shortcuts, not input.
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && acceptsTyping(column)) {
+      event.preventDefault();
+      startEditing(row, col, event.key);
+    }
+  };
+
+  const handleEditorKeyDown = (row: number, col: number) => (event: React.KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeEditor();
+      reselect({ row, col });
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitEdit(row, col);
+      // Down the column, which is how a table gets checked: one field, every row.
+      if (!moveSelection(row + 1, col, 1, 0)) reselect({ row, col });
+      return;
+    }
+    if (event.key === 'Tab') {
+      const step = event.shiftKey ? -1 : 1;
+      // At either end of a row, Tab leaves the table as it would anywhere else on the page, and the
+      // blur that follows commits the edit.
+      if (!moveSelection(row, col + step, 0, step)) return;
+      event.preventDefault();
+      commitEdit(row, col);
+    }
+  };
+
+  // A select's own menu can move focus around inside the editor. Only focus leaving it ends the edit.
+  const handleEditorBlur = (row: number, col: number) => (event: React.FocusEvent) => {
+    const next = event.relatedTarget as Node | null;
+    if (next && editorRef.current?.contains(next)) return;
+    commitEdit(row, col);
+  };
+
+  // The selection ring says "this table is in use". Once focus leaves the table that stops being true,
+  // and a ring left behind on every table the reader has visited only adds noise.
+  const handleTableBlur = (event: React.FocusEvent) => {
+    const next = event.relatedTarget as Node | null;
+    if (next && wrapperRef.current?.contains(next)) return;
+    // Switching to another window is not leaving the table. Coming back should find the same cell.
+    if (!next && !document.hasFocus()) return;
+    if (next) {
+      setSelected(null);
+      return;
+    }
+    // No relatedTarget can mean a click on empty page, or an editor that just closed after Enter while
+    // the next cell is about to take focus. Judge it once focus has settled.
+    blurTimer.current = window.setTimeout(() => {
+      blurTimer.current = null;
+      if (!wrapperRef.current?.contains(document.activeElement)) setSelected(null);
+    }, 0);
+  };
+
+  const addRow = () => {
+    if (!createRow) return;
+    const row = createRow();
+    onChange([...rows, row]);
+    setExpanded(true);
+    const col = columns.findIndex((column) => !isCellReadOnly(column, row));
+    if (col >= 0) reselect({ row: rows.length, col });
+  };
+
+  const deleteRow = (index: number) => {
+    onChange(rows.filter((_, i) => i !== index));
+    setSelected(null);
+  };
+
+  const handleDrop = (target: number) => (event: React.DragEvent) => {
+    event.preventDefault();
+    if (dragIndex !== null) moveRow(dragIndex, target);
+    setDragIndex(null);
+  };
+
+  const showActions = !readOnly;
+  const columnCount = columns.length + (showActions ? 1 : 0);
+
+  return (
+    <div className="eg" ref={wrapperRef} onBlur={handleTableBlur}>
+      <table
+        className="eg-table"
+        role="grid"
+        aria-label={label}
+        aria-rowcount={rows.length + 1}
+        aria-readonly={readOnly || undefined}
+      >
+        <thead>
+          <tr role="row" aria-rowindex={1}>
+            {columns.map((column) => (
+              <th
+                key={column.id ?? column.key}
+                role="columnheader"
+                scope="col"
+                style={{ width: column.width }}
+                className={column.align === 'end' ? 'eg-end' : undefined}
+              >
+                {column.header}
+              </th>
+            ))}
+            {showActions && <th role="columnheader" scope="col" className="eg-actions"><span className="eg-sr-only">Actions</span></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, visibleCount).map((row, r) => (
+            <tr
+              key={keyOf(row)}
+              role="row"
+              aria-rowindex={r + 2}
+              className={dragIndex === r ? 'eg-dragging' : undefined}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop(r)}
+            >
+              {columns.map((column, c) => {
+                const isEditing = editing?.row === r && editing.col === c;
+                const isSelected = selected?.row === r && selected.col === c;
+                const canEdit = editable(r, c);
+                const error = errorAt(r, c);
+                const errorId = error ? `${gridId}-err-${r}-${c}` : undefined;
+                const cellLabel = `${column.header}, row ${r + 1}`;
+                return (
+                  <td
+                    key={column.id ?? column.key}
+                    role="gridcell"
+                    data-cell={`${r}:${c}`}
+                    tabIndex={!isEditing && tabStop?.row === r && tabStop.col === c ? 0 : -1}
+                    aria-selected={canEdit ? isSelected : undefined}
+                    aria-readonly={canEdit ? undefined : true}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={errorId}
+                    className={[
+                      'eg-cell',
+                      column.align === 'end' && 'eg-end',
+                      isSelected && 'eg-selected',
+                      isEditing && 'eg-editing',
+                      !canEdit && 'eg-locked',
+                      error && 'eg-invalid',
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => { if (canEdit && !isEditing) setSelected({ row: r, col: c }); }}
+                    onDoubleClick={() => { if (typeOf(column) !== 'checkbox') startEditing(r, c); }}
+                    onKeyDown={handleCellKeyDown(r, c)}
+                  >
+                    {isEditing ? (
+                      <div ref={editorRef} className="eg-editor" onKeyDown={handleEditorKeyDown(r, c)} onBlur={handleEditorBlur(r, c)}>
+                        <CellEditor column={column} value={draft} onChange={setDraft} label={cellLabel} />
+                      </div>
+                    ) : (
+                      <span className="eg-value" title={error}>{displayValue(column, row[column.key], row)}</span>
+                    )}
+                    {error && <span id={errorId} className="eg-sr-only">{error}</span>}
+                  </td>
+                );
+              })}
+              {showActions && (
+                <td role="gridcell" className="eg-actions">
+                  <span
+                    className="eg-handle"
+                    draggable
+                    aria-hidden
+                    title="Drag to reorder (or Alt+Arrow keys on a cell)"
+                    onDragStart={() => setDragIndex(r)}
+                    onDragEnd={() => setDragIndex(null)}
+                  >
+                    ⠿
+                  </span>
+                  <button type="button" className="eg-delete" aria-label={`Delete row ${r + 1}`} onClick={() => deleteRow(r)}>
+                    ✕
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+          {foldable && !hiddenError && (
+            <tr className="eg-fold">
+              <td colSpan={columnCount}>
+                <button type="button" aria-expanded={!folded} onClick={() => setExpanded(!expanded)}>
+                  {folded ? `Show all ${rows.length} rows` : `Show first ${foldAfter} rows`}
+                </button>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      {createRow && !readOnly && (
+        <button type="button" className="eg-add" onClick={addRow}>+ Add row</button>
+      )}
+    </div>
+  );
+}
