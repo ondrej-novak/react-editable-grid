@@ -24,41 +24,28 @@ const FOLD_MARGIN = 2;
 const ADD_ROW = '+ Add row';
 
 const PERCENTAGE = /^(?:\d+(?:\.\d*)?|\.\d+)%$/;
-const LENGTH = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[a-z]+$/i;
+const LENGTH = /^(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)[a-z]+|(?:calc|min|max|clamp|var)\(.+\))$/i;
 
-function isLength(width: string) {
-  if (LENGTH.test(width)) return true;
-  const open = width.indexOf('(');
-  if (open < 0 || !width.endsWith(')') || width.length <= open + 2) return false;
-  if (!['calc', 'min', 'max', 'clamp', 'var'].includes(width.slice(0, open).toLowerCase())) return false;
-
-  let depth = 0;
-  for (let i = open; i < width.length; i++) {
-    if (width[i] === '\n' || width[i] === '\r') return false;
-    if (width[i] === '(') depth++;
-    if (width[i] === ')') {
-      depth--;
-      if (depth < 0 || (depth === 0 && i !== width.length - 1)) return false;
-    }
-  }
-  return depth === 0;
-}
+const isPercentage = (width: string | undefined): width is string => !!width && PERCENTAGE.test(width);
+const percentOf = (widths: (string | undefined)[]) =>
+  widths.reduce((sum, width) => sum + (isPercentage(width) ? parseFloat(width) : 0), 0);
 
 // A fixed layout gives a column without a width only what the others leave, which on a narrow screen is
 // nothing. The table is held wide enough for each of them to get `--eg-column-min-width`, and scrolls
 // sideways below that. A percentage is of the table, so everything else has to fit in what the percentages
-// leave, and percentages that leave nothing count as no width. So does anything else `calc()` cannot add,
-// such as `auto` or an empty string, because one such term would invalidate the whole sum.
-function minTableWidth(widths: (string | undefined)[]) {
-  const trimmed = widths.map((width) => width?.trim() ?? '');
-  const percent = trimmed.reduce((sum, width) => sum + (PERCENTAGE.test(width) ? parseFloat(width) : 0), 0);
-  const fits = percent < 100;
-  const rest = trimmed
-    .filter((width) => !(fits && PERCENTAGE.test(width)))
-    .map((width) => (isLength(width) ? width : 'var(--eg-column-min-width)'));
-  if (rest.length === 0) return '0px';
-  const sum = rest.join(' + ');
-  return fits && percent > 0 ? `calc((${sum}) * 100 / ${100 - percent})` : `calc(${sum})`;
+// leave. Percentages that leave nothing count as no width, in the columns as well as in the sum. So does
+// anything else `calc()` cannot add, such as `auto` or an empty string, because one such term would
+// invalidate the whole sum.
+function layoutColumns(requested: (string | undefined)[]) {
+  const trimmed = requested.map((width) => width?.trim() || undefined);
+  const widths = percentOf(trimmed) < 100 ? trimmed : trimmed.map((width) => (isPercentage(width) ? undefined : width));
+  const percent = percentOf(widths);
+  const sum = widths
+    .filter((width) => !isPercentage(width))
+    .map((width) => (width && LENGTH.test(width) ? width : 'var(--eg-column-min-width)'))
+    .join(' + ');
+  const minWidth = !sum ? '0px' : percent > 0 ? `calc((${sum}) * 100 / ${100 - percent})` : `calc(${sum})`;
+  return { widths, minWidth };
 }
 
 // Where the row at `index` ends up once the row at `from` has moved to `to`.
@@ -377,20 +364,11 @@ export function EditableGrid<Row extends object>({
   const canAdd = !!createRow && !readOnly;
   const showFold = foldable && !hiddenError;
   // One list sets both the columns and the table's `min-width`, so the two cannot disagree.
-  const columnWidths = [
+  const { widths: columnWidths, minWidth } = layoutColumns([
     ...(showActions ? ['var(--eg-reorder-width)'] : []),
     ...columns.map((column) => column.width),
     ...(showActions ? ['var(--eg-actions-width)'] : []),
-  ];
-  const percentWidth = columnWidths.reduce((sum, width) => {
-    const trimmed = width?.trim() ?? '';
-    return sum + (PERCENTAGE.test(trimmed) ? parseFloat(trimmed) : 0);
-  }, 0);
-  if (percentWidth >= 100) {
-    columnWidths.forEach((width, i) => {
-      if (width && PERCENTAGE.test(width.trim())) columnWidths[i] = undefined;
-    });
-  }
+  ]);
 
   return (
     <div className="eg" ref={wrapperRef} onBlur={handleTableBlur}>
@@ -401,7 +379,7 @@ export function EditableGrid<Row extends object>({
           aria-label={label}
           aria-rowcount={rows.length + 1}
           aria-readonly={readOnly || undefined}
-          style={{ '--eg-columns-width': minTableWidth(columnWidths) } as React.CSSProperties}
+          style={{ '--eg-columns-width': minWidth } as React.CSSProperties}
         >
           <colgroup>
             {columnWidths.map((width, i) => <col key={i} style={{ width }} />)}
