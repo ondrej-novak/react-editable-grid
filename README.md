@@ -83,7 +83,7 @@ export function InvoiceLines() {
 | `readOnly` | `true`, or `(row) => boolean` to lock it for some rows only |
 | `validate` | `(value, row) => string \| undefined`, returning the error message |
 | `format` | `(value, row) => ReactNode` for display, such as currency |
-| `width` | A CSS length, padding included. Columns without one share the space the others leave. |
+| `width` | A CSS length or a percentage of the table, padding included. Columns without one share the space the others leave. |
 | `align` | `'start'` (default) or `'end'` |
 | `id` | Only needed when two columns share a `key` |
 
@@ -105,7 +105,8 @@ The component imports its own CSS file. To change it, override the custom proper
 | `--eg-locked-bg`, `--eg-locked-text` | Read-only cells and row controls |
 | `--eg-error`, `--eg-error-bg` | Invalid cells |
 | `--eg-radius` | Corner radius |
-| `--eg-column-min-width` | Narrowest a column without a `width` gets. Default `10rem`. |
+| `--eg-column-min-width` | Narrowest a column without a `width` gets. Default `6rem`. |
+| `--eg-reorder-width`, `--eg-actions-width` | Widths of the drag handle and delete button columns. Default `2rem` and `3.25rem`. |
 | `--eg-min-width` | Below this width the table scrolls sideways instead of squeezing. Default: what all the columns need. |
 
 Light or dark follows the page's `color-scheme`. Set `color-scheme: light dark` on `:root` to follow the

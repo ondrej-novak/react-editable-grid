@@ -10,7 +10,7 @@
   --eg-error: light-dark(#c62828, #f28b82);
   --eg-error-bg: light-dark(#fdecea, #3b1f1f);
   --eg-radius: 6px;
-  --eg-column-min-width: 10rem;
+  --eg-column-min-width: 6rem;
   --eg-reorder-width: 2rem;
   --eg-actions-width: 3.25rem;
 }
@@ -19,11 +19,10 @@
 
 /* On a narrow screen the table scrolls sideways instead of squeezing its cells below their content.
    Positioned so that the visually hidden labels inside are placed against it and clipped by its scrolling,
-   not against the page, which they would widen. A container, so the fold button can find its width. */
+   not against the page, which they would widen. */
 .eg-scroll {
   position: relative;
   overflow-x: auto;
-  container-type: inline-size;
 }
 
 .eg-table {
@@ -32,19 +31,16 @@
   border-spacing: 0;
   border: 1px solid var(--eg-border);
   border-radius: var(--eg-radius);
-  /* `clip`, not `hidden`, so the table does not become a scroll container that the sticky fold button
-     would stick to instead of `.eg-scroll`. */
-  overflow: clip;
+  overflow: hidden;
+  /* Column widths come from the `<col>`s the component writes, and include the cells' padding. */
   table-layout: fixed;
   /* `--eg-columns-width` is set by the component from the column widths. */
   min-width: var(--eg-min-width, var(--eg-columns-width));
 }
 
 /* `:where()` keeps this at one class of specificity, so the single-class modifiers below override it by
-   order alone, and so can an app's own CSS. A column's `width` includes its padding, so the widths add up
-   to the table's. */
+   order alone, and so can an app's own CSS. */
 .eg-table :where(th, td) {
-  box-sizing: border-box;
   padding: 0.5rem 0.625rem;
   border-bottom: 1px solid var(--eg-border);
   text-align: start;
@@ -113,13 +109,11 @@
 }
 
 .eg-reorder {
-  width: var(--eg-reorder-width);
   padding-inline: 0.25rem;
   text-align: center;
 }
 
 .eg-actions {
-  width: var(--eg-actions-width);
   white-space: nowrap;
   text-align: end;
 }
@@ -143,17 +137,7 @@
 
 .eg-dragging { opacity: 0.4; }
 
-.eg-fold td { padding-inline: 0; }
-
-/* On a table wider than the screen, the button keeps to the visible part and is centred in it. */
-.eg-fold button {
-  position: sticky;
-  inset-inline-start: 0;
-  width: 100cqi;
-  max-width: 100%;
-}
-
-.eg-fold button,
+.eg-fold,
 .eg-add {
   border: none;
   background: none;
@@ -162,6 +146,8 @@
   cursor: pointer;
   padding: 0.25rem 0.5rem;
 }
+/* Outside the scrolling table, so it is centred in what the reader sees however wide the table is. */
+.eg-fold { display: block; margin: 0.25rem auto 0; }
 .eg-add { margin-top: 0.5rem; }
 
 .eg-sr-only {

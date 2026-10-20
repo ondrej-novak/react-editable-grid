@@ -21,6 +21,34 @@ export interface EditableGridProps<Row extends object> {
 // has to run this far past `foldAfter` before it folds at all.
 const FOLD_MARGIN = 2;
 
+const PERCENTAGE = /^(?:\d+\.?\d*|\.\d+)%$/;
+const LENGTH = /^(?:[+-]?(?:\d+\.?\d*|\.\d+)[a-z]+|(?:calc|min|max|clamp|var)\(.+\))$/i;
+
+// A fixed layout gives a column without a width only what the others leave, which on a narrow screen is
+// nothing. The table is held wide enough for each of them to get `--eg-column-min-width`, and scrolls
+// sideways below that. A percentage is of the table, so everything else has to fit in what the percentages
+// leave, and percentages that leave nothing count as no width. So does anything else `calc()` cannot add,
+// such as `auto` or an empty string, because one such term would invalidate the whole sum.
+function minTableWidth(widths: (string | undefined)[]) {
+  const trimmed = widths.map((width) => width?.trim() ?? '');
+  const percent = trimmed.reduce((sum, width) => sum + (PERCENTAGE.test(width) ? parseFloat(width) : 0), 0);
+  const fits = percent < 100;
+  const rest = trimmed
+    .filter((width) => !(fits && PERCENTAGE.test(width)))
+    .map((width) => (LENGTH.test(width) ? width : 'var(--eg-column-min-width)'));
+  if (rest.length === 0) return '0px';
+  const sum = rest.join(' + ');
+  return fits && percent > 0 ? `calc((${sum}) * 100 / ${100 - percent})` : `calc(${sum})`;
+}
+
+// Where the row at `index` ends up once the row at `from` has moved to `to`.
+function indexAfterMove(index: number, from: number, to: number) {
+  if (index === from) return to;
+  if (from < index && index <= to) return index - 1;
+  if (to <= index && index < from) return index + 1;
+  return index;
+}
+
 export function EditableGrid<Row extends object>({
   rows,
   columns,
@@ -41,9 +69,6 @@ export function EditableGrid<Row extends object>({
   const [draft, setDraft] = useState<unknown>(undefined);
   const [expanded, setExpanded] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-
-  // A deleted row can take the selected cell with it.
-  const selected = rawSelected && rawSelected.row < rows.length ? rawSelected : null;
 
   // Focus moves only after a keyboard move. A click has already focused the cell it landed on.
   const pendingFocus = useRef(false);
@@ -82,6 +107,9 @@ export function EditableGrid<Row extends object>({
   );
   const folded = foldable && !expanded && !hiddenError;
   const visibleCount = folded ? foldAfter! : rows.length;
+
+  // A deleted or folded-away row can take the selected cell with it.
+  const selected = rawSelected && rawSelected.row < visibleCount ? rawSelected : null;
 
   const editable = useCallback(
     (row: number, col: number) => !readOnly && !isCellReadOnly(columns[col], rows[row]),
@@ -179,7 +207,17 @@ export function EditableGrid<Row extends object>({
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     onChange(next);
+    // The selection stays with the row it was on, wherever the move leaves that row.
+    setSelected((current) => current && { ...current, row: indexAfterMove(current.row, from, to) });
     return true;
+  };
+
+  const handleCellClick = (row: number, col: number) => () => {
+    if (!editable(row, col) || (editing?.row === row && editing.col === col)) return;
+    // A row the table only opened for because of its error would otherwise fold away under the reader
+    // the moment they fix it.
+    if (foldsAway(row)) setExpanded(true);
+    setSelected({ row, col });
   };
 
   const handleCellKeyDown = (row: number, col: number) => (event: React.KeyboardEvent) => {
@@ -189,7 +227,10 @@ export function EditableGrid<Row extends object>({
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown') && !readOnly) {
       event.preventDefault();
       const to = row + (event.key === 'ArrowUp' ? -1 : 1);
-      if (moveRow(row, to)) reselect({ row: to, col });
+      if (!moveRow(row, to)) return;
+      // A row moved past the fold opens it, as an arrowed selection does, or the row vanishes with the focus.
+      if (foldsAway(to)) setExpanded(true);
+      reselect({ row: to, col });
       return;
     }
 
@@ -313,13 +354,12 @@ export function EditableGrid<Row extends object>({
   };
 
   const showActions = !readOnly;
-  const columnCount = columns.length + (showActions ? 2 : 0);
-  // A fixed layout gives a column without a `width` only what the others leave, which on a narrow screen is
-  // nothing. The table is held as wide as all its columns need, and scrolls sideways below that.
-  const columnsWidth = [
-    ...(showActions ? ['var(--eg-reorder-width)', 'var(--eg-actions-width)'] : []),
-    ...columns.map((column) => column.width ?? 'var(--eg-column-min-width)'),
-  ].join(' + ');
+  // One list sets both the columns and the table's `min-width`, so the two cannot disagree.
+  const columnWidths = [
+    ...(showActions ? ['var(--eg-reorder-width)'] : []),
+    ...columns.map((column) => column.width),
+    ...(showActions ? ['var(--eg-actions-width)'] : []),
+  ];
 
   return (
     <div className="eg" ref={wrapperRef} onBlur={handleTableBlur}>
@@ -330,8 +370,11 @@ export function EditableGrid<Row extends object>({
           aria-label={label}
           aria-rowcount={rows.length + 1}
           aria-readonly={readOnly || undefined}
-          style={{ '--eg-columns-width': `calc(${columnsWidth})` } as React.CSSProperties}
+          style={{ '--eg-columns-width': minTableWidth(columnWidths) } as React.CSSProperties}
         >
+          <colgroup>
+            {columnWidths.map((width, i) => <col key={i} style={{ width }} />)}
+          </colgroup>
           <thead>
             <tr role="row" aria-rowindex={1}>
               {showActions && <th role="columnheader" scope="col" className="eg-reorder"><span className="eg-sr-only">Reorder</span></th>}
@@ -340,7 +383,6 @@ export function EditableGrid<Row extends object>({
                   key={column.id ?? column.key}
                   role="columnheader"
                   scope="col"
-                  style={{ width: column.width }}
                   className={column.align === 'end' ? 'eg-end' : undefined}
                 >
                   {column.header}
@@ -398,7 +440,7 @@ export function EditableGrid<Row extends object>({
                         !canEdit && 'eg-locked',
                         error && 'eg-invalid',
                       ].filter(Boolean).join(' ')}
-                      onClick={() => { if (canEdit && !isEditing) setSelected({ row: r, col: c }); }}
+                      onClick={handleCellClick(r, c)}
                       onDoubleClick={() => { if (typeOf(column) !== 'checkbox') startEditing(r, c); }}
                       onKeyDown={handleCellKeyDown(r, c)}
                     >
@@ -429,18 +471,14 @@ export function EditableGrid<Row extends object>({
                 )}
               </tr>
             ))}
-            {foldable && !hiddenError && (
-              <tr className="eg-fold">
-                <td colSpan={columnCount}>
-                  <button type="button" aria-expanded={!folded} onClick={() => setExpanded(!expanded)}>
-                    {folded ? `Show all ${rows.length} rows` : `Show first ${foldAfter} rows`}
-                  </button>
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
+      {foldable && !hiddenError && (
+        <button type="button" className="eg-fold" aria-expanded={!folded} onClick={() => setExpanded(!expanded)}>
+          {folded ? `Show all ${rows.length} rows` : `Show first ${foldAfter} rows`}
+        </button>
+      )}
       {createRow && !readOnly && (
         <button type="button" className="eg-add" onClick={addRow}>+ Add row</button>
       )}
