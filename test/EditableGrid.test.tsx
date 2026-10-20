@@ -259,6 +259,10 @@ describe('EditableGrid', () => {
       expect(widthWith(['', 'auto', ' 5rem '])).toBe(`calc(${free} + ${free} + 5rem)`);
     });
 
+    it('counts nested CSS sizing functions as lengths', () => {
+      expect(widthWith(['calc(100% - var(--reserved))'])).toBe('calc(calc(100% - var(--reserved)))');
+    });
+
     it('fits the other columns into what percentage widths leave', () => {
       expect(widthWith(['40%', '6rem', undefined])).toBe(`calc((6rem + ${free}) * 100 / 60)`);
       expect(widthWith(['60%', '40%', undefined])).toBe(`calc(${free} + ${free} + ${free})`);

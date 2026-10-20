@@ -23,8 +23,26 @@ const FOLD_MARGIN = 2;
 
 const ADD_ROW = '+ Add row';
 
-const PERCENTAGE = /^(?:\d+\.?\d*|\.\d+)%$/;
-const LENGTH = /^(?:[+-]?(?:\d+\.?\d*|\.\d+)[a-z]+|(?:calc|min|max|clamp|var)\(.+\))$/i;
+const PERCENTAGE = /^(?:\d+(?:\.\d*)?|\.\d+)%$/;
+const LENGTH = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[a-z]+$/i;
+
+function isLength(width: string) {
+  if (LENGTH.test(width)) return true;
+  const open = width.indexOf('(');
+  if (open < 0 || !width.endsWith(')') || width.length <= open + 2) return false;
+  if (!['calc', 'min', 'max', 'clamp', 'var'].includes(width.slice(0, open).toLowerCase())) return false;
+
+  let depth = 0;
+  for (let i = open; i < width.length; i++) {
+    if (width[i] === '\n' || width[i] === '\r') return false;
+    if (width[i] === '(') depth++;
+    if (width[i] === ')') {
+      depth--;
+      if (depth < 0 || (depth === 0 && i !== width.length - 1)) return false;
+    }
+  }
+  return depth === 0;
+}
 
 // A fixed layout gives a column without a width only what the others leave, which on a narrow screen is
 // nothing. The table is held wide enough for each of them to get `--eg-column-min-width`, and scrolls
@@ -37,7 +55,7 @@ function minTableWidth(widths: (string | undefined)[]) {
   const fits = percent < 100;
   const rest = trimmed
     .filter((width) => !(fits && PERCENTAGE.test(width)))
-    .map((width) => (LENGTH.test(width) ? width : 'var(--eg-column-min-width)'));
+    .map((width) => (isLength(width) ? width : 'var(--eg-column-min-width)'));
   if (rest.length === 0) return '0px';
   const sum = rest.join(' + ');
   return fits && percent > 0 ? `calc((${sum}) * 100 / ${100 - percent})` : `calc(${sum})`;
