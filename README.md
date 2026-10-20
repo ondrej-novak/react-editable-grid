@@ -8,14 +8,14 @@ Most editable tables in business apps make you click a pencil icon, fill a dialo
 
 ## What it does
 
-- **One tab stop.** Tab into the table, move with the arrow keys or Tab through the cells row by row, Tab out past the last one. Read-only cells (computed totals, locked rows) and the row buttons are skipped.
+- **Tab moves through the cells.** Tab goes to the next editable cell, row by row, the way it moves between the fields of a form, and leaves the table only past the last one. The arrow keys move in any direction. Read-only cells (computed totals, locked rows) and the row buttons are skipped.
 - **Type to replace.** Typing on a selected text or number cell starts editing with that character, as in Excel. A select or checkbox never takes a typed letter as its value: selects open on Enter, checkboxes toggle on Space.
 - **Enter commits and moves down**, Tab commits and moves right, Escape cancels, clicking away commits. The selection stays on the table through all of it, so the next key lands where you expect.
 - **No false changes.** Opening a cell and leaving it unchanged does not call `onChange`, so a form around the table does not become dirty just because someone read a value.
 - **Validation per cell**, marked with `aria-invalid` and described for screen readers.
 - **Long tables fold.** With `foldAfter`, only the first rows show until the reader asks for the rest. Arrowing past the fold opens it, and an invalid row is never folded out of sight.
 - **Reordering and deleting** by mouse or with Alt+↑/↓ and Ctrl+Delete, so neither depends on a mouse.
-- Follows the WAI-ARIA [grid pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/).
+- Uses the roles, states and arrow keys of the WAI-ARIA [grid pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/) with a roving tabindex, except that Tab moves through the cells instead of leaving the table. That is deliberate.
 - No dependencies besides React. Styling is one CSS file with custom properties, light and dark.
 
 ## Usage
@@ -109,7 +109,7 @@ Light or dark follows the page's `color-scheme`. Set `color-scheme: light dark` 
 | Arrows, Home, End | Move between editable cells |
 | Any character | Replace a text or number cell |
 | Enter, F2 | Edit the cell. In the editor, Enter saves and moves down. |
-| Tab, Shift+Tab | Move to the next or previous cell, wrapping to the next or previous row. In the editor, save first. |
+| Tab, Shift+Tab | Move to the next or previous cell, wrapping to the next or previous row. Past the last cell or before the first, leave the table. In the editor, save first. |
 | Escape | Cancel the edit |
 | Space | Toggle a checkbox cell |
 | Delete, Backspace | Clear a text or number cell |
