@@ -1,27 +1,22 @@
-.eg {
-  --eg-border: #d4d7dd;
-  --eg-header-bg: #f5f6f8;
-  --eg-locked-bg: #fafafa;
-  --eg-locked-text: #6b7280;
-  --eg-accent: #2563eb;
-  --eg-error: #c62828;
-  --eg-error-bg: #fdecea;
+/* `:where()` lets an app's own `.eg { --eg-accent: … }` win however the stylesheets are ordered. Light or
+   dark follows the page's `color-scheme`, not the operating system, so an app with its own theme switch
+   gets a table that matches it. */
+:where(.eg) {
+  --eg-border: light-dark(#d4d7dd, #3a3f47);
+  --eg-header-bg: light-dark(#f5f6f8, #1f2329);
+  --eg-locked-bg: light-dark(#fafafa, #1a1d22);
+  --eg-locked-text: light-dark(#6b7280, #9aa3ad);
+  --eg-accent: light-dark(#2563eb, #60a5fa);
+  --eg-error: light-dark(#c62828, #f28b82);
+  --eg-error-bg: light-dark(#fdecea, #3b1f1f);
   --eg-radius: 6px;
+  --eg-min-width: 36rem;
+}
+
+.eg {
   font: inherit;
   /* On a narrow screen the table scrolls sideways instead of squeezing its cells below their content. */
   overflow-x: auto;
-}
-
-@media (prefers-color-scheme: dark) {
-  .eg {
-    --eg-border: #3a3f47;
-    --eg-header-bg: #1f2329;
-    --eg-locked-bg: #1a1d22;
-    --eg-locked-text: #9aa3ad;
-    --eg-accent: #60a5fa;
-    --eg-error: #f28b82;
-    --eg-error-bg: #3b1f1f;
-  }
 }
 
 .eg-table {
@@ -32,11 +27,12 @@
   border-radius: var(--eg-radius);
   overflow: hidden;
   table-layout: fixed;
-  min-width: 36rem;
+  min-width: var(--eg-min-width);
 }
 
-.eg-table th,
-.eg-table td {
+/* `:where()` keeps this at one class of specificity, so the single-class modifiers below override it by
+   order alone, and so can an app's own CSS. */
+.eg-table :where(th, td) {
   padding: 0.5rem 0.625rem;
   border-bottom: 1px solid var(--eg-border);
   text-align: start;
@@ -51,7 +47,7 @@
   font-size: 0.875rem;
 }
 
-.eg-end { text-align: end !important; }
+.eg-end { text-align: end; }
 
 .eg-cell {
   position: relative;
@@ -89,7 +85,7 @@
   border-color: transparent var(--eg-error) transparent transparent;
 }
 
-.eg-editing { padding: 0 !important; box-shadow: inset 0 0 0 2px var(--eg-accent); }
+.eg-editing { padding: 0; box-shadow: inset 0 0 0 2px var(--eg-accent); }
 
 .eg-editor input[type='text'],
 .eg-editor select {
@@ -104,10 +100,16 @@
   outline: none;
 }
 
+.eg-reorder {
+  width: 1.5rem;
+  padding-inline: 0.25rem;
+  text-align: center;
+}
+
 .eg-actions {
-  width: 4.5rem;
+  width: 2rem;
   white-space: nowrap;
-  text-align: end !important;
+  text-align: end;
 }
 
 .eg-handle {
@@ -129,7 +131,7 @@
 
 .eg-dragging { opacity: 0.4; }
 
-.eg-fold td { text-align: center !important; }
+.eg-fold td { text-align: center; }
 
 .eg-fold button,
 .eg-add {
@@ -148,6 +150,7 @@
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 

@@ -98,11 +98,12 @@ function App() {
           <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></dt><dd>Move between cells, skipping read-only ones</dd>
           <dt>Any character</dt><dd>Replace a text or number cell</dd>
           <dt><kbd>Enter</kbd> / <kbd>F2</kbd></dt><dd>Edit the cell; Enter again saves and moves down</dd>
-          <dt><kbd>Tab</kbd></dt><dd>While editing, save and move right</dd>
+          <dt><kbd>Tab</kbd></dt><dd>Move to the next cell, on to the next row at the end, saving an edit first</dd>
           <dt><kbd>Esc</kbd></dt><dd>Cancel the edit</dd>
           <dt><kbd>Space</kbd></dt><dd>Toggle a checkbox cell</dd>
           <dt><kbd>Delete</kbd></dt><dd>Clear a text or number cell</dd>
           <dt><kbd>Alt</kbd> + <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move the row</dd>
+          <dt><kbd>Ctrl</kbd> + <kbd>Delete</kbd></dt><dd>Delete the row</dd>
         </dl>
       </section>
 

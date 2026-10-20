@@ -1,6 +1,6 @@
 # react-editable-grid
 
-An editable table for React that works like a spreadsheet from the keyboard.
+An editable table for React apps that works like a spreadsheet from the keyboard.
 
 **[Live demo](https://ondrej-novak.github.io/react-editable-grid/)**
 
@@ -11,8 +11,8 @@ arrow to the cell, type the new value, press Enter, carry on down the column.
 
 ## What it does
 
-- **One tab stop.** Tab into the table, move with the arrow keys, Tab out. Read-only cells (computed
-  totals, locked rows) are skipped.
+- **One tab stop.** Tab into the table, move with the arrow keys or Tab through the cells row by row, Tab
+  out past the last one. Read-only cells (computed totals, locked rows) and the row buttons are skipped.
 - **Type to replace.** Typing on a selected text or number cell starts editing with that character, as
   in Excel. A select or checkbox never takes a typed letter as its value: selects open on Enter, checkboxes
   toggle on Space.
@@ -23,7 +23,7 @@ arrow to the cell, type the new value, press Enter, carry on down the column.
 - **Validation per cell**, marked with `aria-invalid` and described for screen readers.
 - **Long tables fold.** With `foldAfter`, only the first rows show until the reader asks for the rest.
   Arrowing past the fold opens it, and an invalid row is never folded out of sight.
-- **Reordering** by drag handle or with Alt+↑/↓, so it does not depend on a mouse.
+- **Reordering and deleting** by mouse or with Alt+↑/↓ and Ctrl+Delete, so neither depends on a mouse.
 - Follows the WAI-ARIA [grid pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/).
 - No dependencies besides React. Styling is one CSS file with custom properties, light and dark.
 
@@ -86,6 +86,29 @@ export function InvoiceLines() {
 | `width`, `align` | Layout |
 | `id` | Only needed when two columns share a `key` |
 
+### Styling
+
+The component imports its own CSS file. To change it, override the custom properties on `.eg`:
+
+```css
+.eg {
+  --eg-accent: #7c3aed;
+  --eg-min-width: 24rem;
+}
+```
+
+| Property | |
+|---|---|
+| `--eg-border`, `--eg-header-bg` | Lines and the header row |
+| `--eg-accent` | Selection ring and buttons |
+| `--eg-locked-bg`, `--eg-locked-text` | Read-only cells and row controls |
+| `--eg-error`, `--eg-error-bg` | Invalid cells |
+| `--eg-radius` | Corner radius |
+| `--eg-min-width` | Below this width the table scrolls sideways instead of squeezing. Default `36rem`. |
+
+Light or dark follows the page's `color-scheme`. Set `color-scheme: light dark` on `:root` to follow the
+operating system, or set `light` or `dark` from your theme switch. Without it, the table stays light.
+
 ## Keys
 
 | Key | |
@@ -93,11 +116,12 @@ export function InvoiceLines() {
 | Arrows, Home, End | Move between editable cells |
 | Any character | Replace a text or number cell |
 | Enter, F2 | Edit the cell. In the editor, Enter saves and moves down. |
-| Tab, Shift+Tab | In the editor, save and move right or left |
+| Tab, Shift+Tab | Move to the next or previous cell, wrapping to the next or previous row. In the editor, save first. |
 | Escape | Cancel the edit |
 | Space | Toggle a checkbox cell |
 | Delete, Backspace | Clear a text or number cell |
 | Alt+↑, Alt+↓ | Move the row |
+| Ctrl+Delete, ⌘+Backspace | Delete the row |
 
 ## A few details that took more than one try
 

@@ -118,6 +118,17 @@ export function EditableGrid<Row extends object>({
     setSelected({ ...position });
   };
 
+  // Tab reads the table like text: along the row, then on from the start of the next one. Only past the
+  // last cell, or before the first, does it leave the table.
+  const tabFrom = (row: number, col: number, step: 1 | -1) => {
+    for (let i = row * columns.length + col + step; i >= 0 && i < rows.length * columns.length; i += step) {
+      const r = Math.floor(i / columns.length);
+      const c = i % columns.length;
+      if (editable(r, c)) return moveSelection(r, c);
+    }
+    return false;
+  };
+
   useEffect(() => {
     if (!pendingFocus.current || !selected) return;
     pendingFocus.current = false;
@@ -182,6 +193,20 @@ export function EditableGrid<Row extends object>({
       return;
     }
 
+    // The delete button is out of the tab order, so the keyboard needs its own way to remove a row.
+    if ((event.ctrlKey || event.metaKey) && (event.key === 'Delete' || event.key === 'Backspace') && !readOnly) {
+      event.preventDefault();
+      onChange(rows.filter((_, i) => i !== row));
+      // The row below slides into place, and the selection stays on it instead of falling out of the table.
+      if (rows.length > 1) reselect({ row: Math.min(row, rows.length - 2), col });
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      if (tabFrom(row, col, event.shiftKey ? -1 : 1)) event.preventDefault();
+      return;
+    }
+
     switch (event.key) {
       case 'ArrowDown': event.preventDefault(); moveSelection(row + 1, col, 1, 0); return;
       case 'ArrowUp': event.preventDefault(); moveSelection(row - 1, col, -1, 0); return;
@@ -234,10 +259,8 @@ export function EditableGrid<Row extends object>({
       return;
     }
     if (event.key === 'Tab') {
-      const step = event.shiftKey ? -1 : 1;
-      // At either end of a row, Tab leaves the table as it would anywhere else on the page, and the
-      // blur that follows commits the edit.
-      if (!moveSelection(row, col + step, 0, step)) return;
+      // Leaving the table is left to the browser, and the blur that follows commits the edit.
+      if (!tabFrom(row, col, event.shiftKey ? -1 : 1)) return;
       event.preventDefault();
       commitEdit(row, col);
     }
@@ -290,7 +313,7 @@ export function EditableGrid<Row extends object>({
   };
 
   const showActions = !readOnly;
-  const columnCount = columns.length + (showActions ? 1 : 0);
+  const columnCount = columns.length + (showActions ? 2 : 0);
 
   return (
     <div className="eg" ref={wrapperRef} onBlur={handleTableBlur}>
@@ -303,6 +326,7 @@ export function EditableGrid<Row extends object>({
       >
         <thead>
           <tr role="row" aria-rowindex={1}>
+            {showActions && <th role="columnheader" scope="col" className="eg-reorder"><span className="eg-sr-only">Reorder</span></th>}
             {columns.map((column) => (
               <th
                 key={column.id ?? column.key}
@@ -327,6 +351,20 @@ export function EditableGrid<Row extends object>({
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop(r)}
             >
+              {showActions && (
+                <td role="gridcell" className="eg-reorder">
+                  <span
+                    className="eg-handle"
+                    draggable
+                    aria-hidden
+                    title="Drag to reorder (or Alt+Arrow keys on a cell)"
+                    onDragStart={() => setDragIndex(r)}
+                    onDragEnd={() => setDragIndex(null)}
+                  >
+                    ⠿
+                  </span>
+                </td>
+              )}
               {columns.map((column, c) => {
                 const isEditing = editing?.row === r && editing.col === c;
                 const isSelected = selected?.row === r && selected.col === c;
@@ -369,17 +407,14 @@ export function EditableGrid<Row extends object>({
               })}
               {showActions && (
                 <td role="gridcell" className="eg-actions">
-                  <span
-                    className="eg-handle"
-                    draggable
-                    aria-hidden
-                    title="Drag to reorder (or Alt+Arrow keys on a cell)"
-                    onDragStart={() => setDragIndex(r)}
-                    onDragEnd={() => setDragIndex(null)}
+                  <button
+                    type="button"
+                    className="eg-delete"
+                    tabIndex={-1}
+                    aria-label={`Delete row ${r + 1}`}
+                    title="Delete row (or Ctrl+Delete on a cell)"
+                    onClick={() => deleteRow(r)}
                   >
-                    ⠿
-                  </span>
-                  <button type="button" className="eg-delete" aria-label={`Delete row ${r + 1}`} onClick={() => deleteRow(r)}>
                     ✕
                   </button>
                 </td>

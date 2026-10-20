@@ -41,7 +41,7 @@ function Harness({ initial, onChange = () => {}, foldAfter }: { initial: Item[];
 }
 
 const cell = (row: number, col: number) =>
-  screen.getAllByRole('row')[row + 1].querySelectorAll<HTMLElement>('[role="gridcell"]')[col];
+  screen.getAllByRole('row')[row + 1].querySelector<HTMLElement>(`[data-cell="${row}:${col}"]`)!;
 
 describe('EditableGrid', () => {
   it('is a single tab stop that rests on the first editable cell', async () => {
@@ -50,8 +50,43 @@ describe('EditableGrid', () => {
     await user.tab();
     await user.tab();
     expect(cell(0, 0)).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(screen.getByRole('button', { name: 'Before' })).toHaveFocus();
+  });
+
+  it('moves through the cells with Tab, row by row, skipping the row controls', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={[item('Apples'), item('Pears')]} />);
+    await user.click(cell(0, 2));
     await user.tab();
-    expect(screen.getByRole('button', { name: 'Delete row 1' })).toHaveFocus();
+    expect(cell(0, 3)).toHaveFocus();
+    await user.tab(); // Total is read-only, so this is the end of the row
+    expect(cell(1, 0)).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(cell(0, 3)).toHaveFocus();
+    await user.click(cell(1, 3));
+    await user.tab();
+    expect(screen.getByRole('button', { name: '+ Add row' })).toHaveFocus();
+  });
+
+  it('commits on Shift+Tab at the start of a row and moves to the end of the one above', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness initial={[item('Apples'), item('Pears')]} onChange={onChange} />);
+    await user.click(cell(1, 0));
+    await user.keyboard('Kiwi{Shift>}{Tab}{/Shift}');
+    expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ name: 'Apples' }), expect.objectContaining({ name: 'Kiwi' })]);
+    expect(cell(0, 3)).toHaveFocus();
+  });
+
+  it('deletes the selected row with Ctrl+Delete and keeps the selection in the table', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness initial={[item('Apples'), item('Pears'), item('Plums')]} onChange={onChange} />);
+    await user.click(cell(1, 0));
+    await user.keyboard('{Control>}{Delete}{/Control}');
+    expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ name: 'Apples' }), expect.objectContaining({ name: 'Plums' })]);
+    expect(cell(1, 0)).toHaveFocus();
   });
 
   it('moves with the arrow keys and steps over read-only cells', async () => {
