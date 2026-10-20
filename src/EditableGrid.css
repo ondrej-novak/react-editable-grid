@@ -15,7 +15,7 @@
   --eg-actions-width: 3.25rem;
 }
 
-.eg { font: inherit; }
+.eg { font: inherit; min-width: 0; }
 
 /* On a narrow screen the table scrolls sideways instead of squeezing its cells below their content.
    Positioned so that the visually hidden labels inside are placed against it and clipped by its scrolling,
