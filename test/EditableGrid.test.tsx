@@ -301,6 +301,8 @@ describe('EditableGrid', () => {
       await user.click(cell(8, 0));
       await user.click(screen.getByRole('button', { name: 'Show first 5 rows' }));
       await user.tab({ shift: true });
+      expect(screen.getByRole('button', { name: '+ Add row' })).toHaveFocus();
+      await user.tab({ shift: true });
       expect(cell(0, 0)).toHaveFocus();
     });
 

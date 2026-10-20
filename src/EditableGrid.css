@@ -137,6 +137,15 @@
 
 .eg-dragging { opacity: 0.4; }
 
+/* Outside the scrolling table, so the fold button is centred in what the reader sees however wide the
+   table is. "Add row" floats to the start and a hidden copy of it to the end, so the fold button between
+   them sits at the true centre, and drops below them, still centred, once it no longer fits. */
+.eg-footer {
+  display: flow-root;
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
 .eg-fold,
 .eg-add {
   border: none;
@@ -146,9 +155,8 @@
   cursor: pointer;
   padding: 0.25rem 0.5rem;
 }
-/* Outside the scrolling table, so it is centred in what the reader sees however wide the table is. */
-.eg-fold { display: block; margin: 0.25rem auto 0; }
-.eg-add { margin-top: 0.5rem; }
+.eg-add { float: left; float: inline-start; }
+.eg-mirror { float: right; float: inline-end; visibility: hidden; }
 
 .eg-sr-only {
   position: absolute;

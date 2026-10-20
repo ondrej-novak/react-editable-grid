@@ -21,6 +21,8 @@ export interface EditableGridProps<Row extends object> {
 // has to run this far past `foldAfter` before it folds at all.
 const FOLD_MARGIN = 2;
 
+const ADD_ROW = '+ Add row';
+
 const PERCENTAGE = /^(?:\d+\.?\d*|\.\d+)%$/;
 const LENGTH = /^(?:[+-]?(?:\d+\.?\d*|\.\d+)[a-z]+|(?:calc|min|max|clamp|var)\(.+\))$/i;
 
@@ -354,6 +356,8 @@ export function EditableGrid<Row extends object>({
   };
 
   const showActions = !readOnly;
+  const canAdd = !!createRow && !readOnly;
+  const showFold = foldable && !hiddenError;
   // One list sets both the columns and the table's `min-width`, so the two cannot disagree.
   const columnWidths = [
     ...(showActions ? ['var(--eg-reorder-width)'] : []),
@@ -474,13 +478,16 @@ export function EditableGrid<Row extends object>({
           </tbody>
         </table>
       </div>
-      {foldable && !hiddenError && (
-        <button type="button" className="eg-fold" aria-expanded={!folded} onClick={() => setExpanded(!expanded)}>
-          {folded ? `Show all ${rows.length} rows` : `Show first ${foldAfter} rows`}
-        </button>
-      )}
-      {createRow && !readOnly && (
-        <button type="button" className="eg-add" onClick={addRow}>+ Add row</button>
+      {(canAdd || showFold) && (
+        <div className="eg-footer">
+          {canAdd && <button type="button" className="eg-add" onClick={addRow}>{ADD_ROW}</button>}
+          {canAdd && showFold && <span className="eg-add eg-mirror" aria-hidden>{ADD_ROW}</span>}
+          {showFold && (
+            <button type="button" className="eg-fold" aria-expanded={!folded} onClick={() => setExpanded(!expanded)}>
+              {folded ? `Show all ${rows.length} rows` : `Show first ${foldAfter} rows`}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
